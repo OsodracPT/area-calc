@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Area Calculator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #eee; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  #toolbar {
+    display: flex; align-items: center; gap: 12px; padding: 10px 20px;
+    background: #16213e; border-bottom: 2px solid #0f3460; flex-wrap: wrap;
+  }
+  #toolbar button {
+    padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer;
+    font-size: 13px; font-weight: 600; transition: background 0.2s;
+  }
+  #toolbar button.primary { background: #e94560; color: #fff; }
+  #toolbar button.primary:hover { background: #c73750; }
+  #toolbar button.secondary { background: #0f3460; color: #eee; }
+  #toolbar button.secondary:hover { background: #1a4a8a; }
+  #toolbar button.active { outline: 2px solid #e94560; outline-offset: 2px; }
+  .toolbar-sep { width: 1px; height: 28px; background: #0f3460; }
+  #status { font-size: 13px; color: #aaa; }
+  #info-panel {
+    display: flex; gap: 20px; padding: 8px 20px; background: #16213e;
+    border-bottom: 1px solid #0f3460; font-size: 13px; flex-wrap: wrap;
+  }
+  .info-item { display: flex; gap: 6px; align-items: center; }
+  .info-label { color: #888; }
+  .info-value { color: #e94560; font-weight: 700; font-size: 15px; }
+  #canvas-container {
+    flex: 1; overflow: hidden; position: relative;
+  }
+  canvas { display: block; }
+  #box-list {
+    max-height: 160px; overflow-y: auto; padding: 8px 20px;
+    background: #16213e; border-top: 2px solid #0f3460;
+  }
+  #box-list:empty { display: none; }
+  .box-entry {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 5px 10px; margin: 2px 0; border-radius: 4px; font-size: 13px;
+  }
+  .box-entry:nth-child(odd) { background: rgba(15, 52, 96, 0.5); }
+  .box-entry .remove-btn {
+    background: none; border: none; color: #e94560; cursor: pointer;
+    font-size: 16px; padding: 0 4px;
+  }
+  .box-color-dot {
+    display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+    margin-right: 8px; vertical-align: middle;
+  }
+  #zoom-controls {
+    position: absolute; bottom: 16px; right: 16px; display: flex;
+    flex-direction: column; gap: 4px; z-index: 10;
+  }
+  #zoom-controls button {
+    width: 36px; height: 36px; border: none; border-radius: 6px;
+    background: rgba(22, 33, 62, 0.9); color: #eee; font-size: 20px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  #zoom-controls button:hover { background: rgba(15, 52, 96, 0.95); }
+  #zoom-label {
+    text-align: center; font-size: 11px; color: #aaa;
+    background: rgba(22, 33, 62, 0.9); border-radius: 4px; padding: 2px 4px;
+  }
+
+  /* Calibration modal */
+  #cal-modal {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,0.6); align-items: center; justify-content: center;
+  }
+  #cal-modal.visible { display: flex; }
+  #cal-modal-inner {
+    background: #16213e; border: 2px solid #0f3460; border-radius: 12px;
+    padding: 24px; min-width: 320px;
+  }
+  #cal-modal-inner h3 { margin-bottom: 12px; }
+  #cal-modal-inner label { display: block; margin-bottom: 8px; color: #aaa; font-size: 14px; }
+  #cal-modal-inner input {
+    width: 100%; padding: 8px 12px; border: 1px solid #0f3460; border-radius: 6px;
+    background: #1a1a2e; color: #eee; font-size: 16px; margin-bottom: 16px;
+  }
+  #cal-modal-inner .modal-btns { display: flex; gap: 12px; justify-content: flex-end; }
+  #cal-modal-inner button {
+    padding: 8px 20px; border: none; border-radius: 6px; cursor: pointer;
+    font-size: 14px; font-weight: 600;
+  }
+  #cal-confirm { background: #e94560; color: #fff; }
+  #cal-cancel { background: #0f3460; color: #eee; }
+
+  /* Add-box modal (reuses calibration modal styles) */
+  #box-modal {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,0.6); align-items: center; justify-content: center;
+  }
+  #box-modal.visible { display: flex; }
+  #box-modal-inner {
+    background: #16213e; border: 2px solid #0f3460; border-radius: 12px;
+    padding: 24px; min-width: 320px;
+  }
+  #box-modal-inner h3 { margin-bottom: 12px; }
+  #box-modal-inner label { display: block; margin-bottom: 4px; color: #aaa; font-size: 14px; }
+  #box-modal-inner input {
+    width: 100%; padding: 8px 12px; border: 1px solid #0f3460; border-radius: 6px;
+    background: #1a1a2e; color: #eee; font-size: 16px; margin-bottom: 12px;
+  }
+  #box-modal-inner .modal-btns { display: flex; gap: 12px; justify-content: flex-end; }
+  #box-modal-inner button {
+    padding: 8px 20px; border: none; border-radius: 6px; cursor: pointer;
+    font-size: 14px; font-weight: 600;
+  }
+  #box-confirm { background: #e94560; color: #fff; }
+  #box-cancel { background: #0f3460; color: #eee; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <button id="btn-calibrate" class="secondary">Calibrate</button>
+  <div class="toolbar-sep"></div>
+  <button id="btn-draw" class="primary active">Draw Area</button>
+  <button id="btn-add-box" class="secondary">Add Box by Size</button>
+  <button id="btn-patch" class="secondary">Place Patch</button>
+  <button id="btn-move-patch" class="secondary">Move Patch</button>
+  <button id="btn-delete" class="secondary">Delete</button>
+  <div class="toolbar-sep"></div>
+  <button id="btn-undo" class="secondary">Undo</button>
+  <button id="btn-clear" class="secondary">Clear All</button>
+  <div class="toolbar-sep"></div>
+  <span id="status">Click and drag to draw an area. Scroll to zoom, Alt+drag to pan.</span>
+</div>
+
+<div id="info-panel">
+  <div class="info-item">
+    <span class="info-label">Scale:</span>
+    <span class="info-value" id="val-scale">20.0 px/m</span>
+  </div>
+  <div class="info-item">
+    <span class="info-label">Drawn Area:</span>
+    <span class="info-value" id="val-area">0 m²</span>
+  </div>
+  <div class="info-item">
+    <span class="info-label">Patches needed:</span>
+    <span class="info-value" id="val-patches">0</span>
+  </div>
+  <div class="toolbar-sep"></div>
+  <div class="info-item">
+    <span class="info-label">Placed Patches:</span>
+    <span class="info-value" id="val-placed">0</span>
+  </div>
+  <div class="info-item">
+    <span class="info-label">Placed Area:</span>
+    <span class="info-value" id="val-placed-area">0 m²</span>
+  </div>
+  <div class="toolbar-sep"></div>
+  <div class="info-item">
+    <span class="info-label">Zoom:</span>
+    <span class="info-value" id="val-zoom">100%</span>
+  </div>
+</div>
+
+<div id="canvas-container">
+  <canvas id="canvas"></canvas>
+  <div id="zoom-controls">
+    <button id="btn-zoom-in" title="Zoom in (+)">+</button>
+    <span id="zoom-label">100%</span>
+    <button id="btn-zoom-out" title="Zoom out (-)">−</button>
+    <button id="btn-zoom-fit" title="Fit to screen" style="font-size:14px;">Fit</button>
+  </div>
+</div>
+
+<div id="box-list"></div>
+
+<!-- Calibration modal -->
+<div id="cal-modal">
+  <div id="cal-modal-inner">
+    <h3>Calibrate Scale</h3>
+    <label>How long is the line you just drew? (meters)</label>
+    <input type="number" id="cal-input" value="20" step="0.1" min="0.1">
+    <div class="modal-btns">
+      <button id="cal-cancel">Cancel</button>
+      <button id="cal-confirm">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add box by size modal -->
+<div id="box-modal">
+  <div id="box-modal-inner">
+    <h3>Add Box by Size</h3>
+    <label>Width (meters)</label>
+    <input type="number" id="box-width-input" value="5" step="0.1" min="0.1">
+    <label>Height (meters)</label>
+    <input type="number" id="box-height-input" value="5" step="0.1" min="0.1">
+    <div class="modal-btns">
+      <button id="box-cancel">Cancel</button>
+      <button id="box-confirm">Place on Map</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const IMAGE_PATH = 'dji_fly_20260327_155738_167_1774627216944_photo_optimized.jpg';
+const PATCH_W = 1.25;
+const PATCH_H = 1.25;
+const PATCH_AREA = PATCH_W * PATCH_H;
+
+const BOX_COLORS = [
+  'rgba(233, 69, 96, 0.35)', 'rgba(52, 152, 219, 0.35)',
+  'rgba(46, 204, 113, 0.35)', 'rgba(241, 196, 15, 0.35)',
+  'rgba(155, 89, 182, 0.35)', 'rgba(230, 126, 34, 0.35)',
+  'rgba(26, 188, 156, 0.35)', 'rgba(236, 240, 241, 0.35)',
+];
+const BOX_BORDERS = [
+  '#e94560', '#3498db', '#2ecc71', '#f1c40f',
+  '#9b59b6', '#e67e22', '#1abc9c', '#ecf0f1',
+];
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const container = document.getElementById('canvas-container');
+
+const btnCalibrate = document.getElementById('btn-calibrate');
+const btnDraw = document.getElementById('btn-draw');
+const btnPatch = document.getElementById('btn-patch');
+const btnMovePatch = document.getElementById('btn-move-patch');
+const btnDelete = document.getElementById('btn-delete');
+const btnUndo = document.getElementById('btn-undo');
+const btnClear = document.getElementById('btn-clear');
+const btnZoomIn = document.getElementById('btn-zoom-in');
+const btnZoomOut = document.getElementById('btn-zoom-out');
+const btnZoomFit = document.getElementById('btn-zoom-fit');
+const statusEl = document.getElementById('status');
+const valScale = document.getElementById('val-scale');
+const valArea = document.getElementById('val-area');
+const valPatches = document.getElementById('val-patches');
+const valPlaced = document.getElementById('val-placed');
+const valPlacedArea = document.getElementById('val-placed-area');
+const valZoom = document.getElementById('val-zoom');
+const zoomLabel = document.getElementById('zoom-label');
+const boxList = document.getElementById('box-list');
+const calModal = document.getElementById('cal-modal');
+const calInput = document.getElementById('cal-input');
+const calConfirm = document.getElementById('cal-confirm');
+const calCancel = document.getElementById('cal-cancel');
+const btnAddBox = document.getElementById('btn-add-box');
+const boxModal = document.getElementById('box-modal');
+const boxWidthInput = document.getElementById('box-width-input');
+const boxHeightInput = document.getElementById('box-height-input');
+const boxConfirm = document.getElementById('box-confirm');
+const boxCancel = document.getElementById('box-cancel');
+
+let img = new Image();
+let mode = 'draw'; // draw | patch | move | delete | calibrate
+let pixelsPerMeter = 20.0;
+let tempStart = null;
+let boxes = [];
+let patches = [];
+let isDragging = false;
+
+// View transform: viewX/viewY is the image-coord at the top-left of the viewport
+// zoom is how many screen pixels per image pixel
+let zoom = 1;
+let viewX = 0, viewY = 0; // image coords of viewport origin
+
+// Pan state
+let isPanning = false;
+let panStartScreen = { x: 0, y: 0 };
+let panStartView = { x: 0, y: 0 };
+let spaceHeld = false;
+
+// Move-patch state
+let movingPatchIdx = -1;
+let moveOffset = { x: 0, y: 0 };
+
+// Calibration state
+let calLine = null; // {x1,y1,x2,y2} in image coords
+let calLinePixelDist = 0;
+let prevMode = 'draw';
+
+// Place-box state (box created by size input)
+let placingBox = null; // {wPx, hPx, wM, hM} — follows cursor until clicked
+
+function patchPxW() { return PATCH_W * pixelsPerMeter; }
+function patchPxH() { return PATCH_H * pixelsPerMeter; }
+
+img.onload = () => { resizeCanvas(); fitToScreen(); render(); };
+img.src = IMAGE_PATH;
+
+function resizeCanvas() {
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  }
+}
+
+function fitToScreen() {
+  resizeCanvas();
+  const cw = canvas.width;
+  const ch = canvas.height;
+  zoom = Math.min(cw / img.width, ch / img.height);
+  viewX = -(cw / zoom - img.width) / 2;
+  viewY = -(ch / zoom - img.height) / 2;
+  updateZoomDisplay();
+}
+
+window.addEventListener('resize', () => { resizeCanvas(); render(); });
+
+function updateZoomDisplay() {
+  const pct = Math.round(zoom * 100) + '%';
+  valZoom.textContent = pct;
+  zoomLabel.textContent = pct;
+}
+
+function eventToImg(e) {
+  const rect = canvas.getBoundingClientRect();
+  // Account for any CSS scaling of the canvas
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const sx = (e.clientX - rect.left) * scaleX;
+  const sy = (e.clientY - rect.top) * scaleY;
+  return {
+    x: viewX + sx / zoom,
+    y: viewY + sy / zoom,
+  };
+}
+
+// Zoom around a canvas-buffer point
+function zoomAt(canvasX, canvasY, factor) {
+  const newZoom = Math.max(0.05, Math.min(20, zoom * factor));
+  const imgX = viewX + canvasX / zoom;
+  const imgY = viewY + canvasY / zoom;
+  zoom = newZoom;
+  viewX = imgX - canvasX / zoom;
+  viewY = imgY - canvasY / zoom;
+  updateZoomDisplay();
+  render();
+}
+
+function zoomCenter(factor) {
+  zoomAt(canvas.width / 2, canvas.height / 2, factor);
+}
+
+function render() {
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.save();
+  ctx.scale(zoom, zoom);
+  ctx.translate(-viewX, -viewY);
+
+  ctx.drawImage(img, 0, 0);
+
+  const lw = 2 / zoom; // consistent line width regardless of zoom
+
+  // Draw calibration line
+  if (calLine) {
+    ctx.beginPath();
+    ctx.moveTo(calLine.x1, calLine.y1);
+    ctx.lineTo(calLine.x2, calLine.y2);
+    ctx.strokeStyle = '#00ff88';
+    ctx.lineWidth = 3 / zoom;
+    ctx.setLineDash([8 / zoom, 4 / zoom]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const mx = (calLine.x1 + calLine.x2) / 2;
+    const my = (calLine.y1 + calLine.y2) / 2;
+    const dist = calLinePixelDist / pixelsPerMeter;
+    ctx.font = `bold ${14 / zoom}px system-ui`;
+    ctx.fillStyle = '#00ff88';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 4 / zoom;
+    ctx.fillText(`${dist.toFixed(1)}m reference`, mx, my - 10 / zoom);
+    ctx.shadowBlur = 0;
+  }
+
+  // Draw area boxes
+  boxes.forEach((box) => {
+    ctx.fillStyle = BOX_COLORS[box.colorIdx % BOX_COLORS.length];
+    ctx.fillRect(box.x, box.y, box.w, box.h);
+    ctx.strokeStyle = BOX_BORDERS[box.colorIdx % BOX_BORDERS.length];
+    ctx.lineWidth = lw;
+    ctx.strokeRect(box.x, box.y, box.w, box.h);
+
+    const wm = Math.abs(box.w) / pixelsPerMeter;
+    const hm = Math.abs(box.h) / pixelsPerMeter;
+    const area = wm * hm;
+    const needed = Math.ceil(area / PATCH_AREA);
+    const cx = box.x + box.w / 2;
+    const cy = box.y + box.h / 2;
+    ctx.font = `bold ${14 / zoom}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 4 / zoom;
+    ctx.fillText(`${area.toFixed(1)} m²`, cx, cy - 4 / zoom);
+    ctx.fillText(`${wm.toFixed(1)}m x ${hm.toFixed(1)}m`, cx, cy + 14 / zoom);
+    ctx.fillText(`${needed} patches`, cx, cy + 32 / zoom);
+    ctx.shadowBlur = 0;
+  });
+
+  // Draw placed patches
+  const ppw = patchPxW(), pph = patchPxH();
+  patches.forEach((p, i) => {
+    ctx.fillStyle = 'rgba(0, 255, 120, 0.4)';
+    ctx.fillRect(p.x, p.y, ppw, pph);
+    ctx.strokeStyle = '#00ff78';
+    ctx.lineWidth = 1.5 / zoom;
+    ctx.strokeRect(p.x, p.y, ppw, pph);
+    ctx.font = `bold ${10 / zoom}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 3 / zoom;
+    ctx.fillText(`${i + 1}`, p.x + ppw / 2, p.y + pph / 2 + 3 / zoom);
+    ctx.shadowBlur = 0;
+  });
+
+  // Draw ghost box being placed
+  if (placingBox && placingBox.imgX != null) {
+    const bx = placingBox.imgX - placingBox.wPx / 2;
+    const by = placingBox.imgY - placingBox.hPx / 2;
+    ctx.fillStyle = 'rgba(233, 69, 96, 0.3)';
+    ctx.fillRect(bx, by, placingBox.wPx, placingBox.hPx);
+    ctx.strokeStyle = '#e94560';
+    ctx.lineWidth = 2 / zoom;
+    ctx.setLineDash([6 / zoom, 4 / zoom]);
+    ctx.strokeRect(bx, by, placingBox.wPx, placingBox.hPx);
+    ctx.setLineDash([]);
+    ctx.font = `bold ${14 / zoom}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 4 / zoom;
+    const area = placingBox.wM * placingBox.hM;
+    ctx.fillText(`${placingBox.wM}m x ${placingBox.hM}m = ${area.toFixed(1)} m²`, placingBox.imgX, placingBox.imgY);
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.restore();
+}
+
+function updateInfo() {
+  valScale.textContent = `${pixelsPerMeter.toFixed(1)} px/m`;
+  let totalArea = 0;
+  boxes.forEach(box => {
+    totalArea += (Math.abs(box.w) / pixelsPerMeter) * (Math.abs(box.h) / pixelsPerMeter);
+  });
+  valArea.textContent = `${totalArea.toFixed(1)} m²`;
+  valPatches.textContent = Math.ceil(totalArea / PATCH_AREA);
+  valPlaced.textContent = patches.length;
+  valPlacedArea.textContent = `${(patches.length * PATCH_AREA).toFixed(2)} m²`;
+  updateBoxList();
+}
+
+function updateBoxList() {
+  boxList.innerHTML = '';
+  boxes.forEach((box, i) => {
+    const div = document.createElement('div');
+    div.className = 'box-entry';
+    const wm = Math.abs(box.w) / pixelsPerMeter;
+    const hm = Math.abs(box.h) / pixelsPerMeter;
+    const area = wm * hm;
+    const needed = Math.ceil(area / PATCH_AREA);
+    div.innerHTML = `
+      <span><span class="box-color-dot" style="background:${BOX_BORDERS[box.colorIdx % BOX_BORDERS.length]}"></span>
+      Area ${i + 1} — ${wm.toFixed(1)}m x ${hm.toFixed(1)}m = ${area.toFixed(1)} m² (${needed} patches)</span>
+      <button class="remove-btn" data-idx="${i}" title="Remove">&times;</button>
+    `;
+    boxList.appendChild(div);
+  });
+  boxList.querySelectorAll('.remove-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      boxes.splice(parseInt(e.target.dataset.idx), 1);
+      updateInfo(); render();
+    });
+  });
+}
+
+function setMode(m) {
+  mode = m;
+  if (m !== 'place') placingBox = null;
+  [btnCalibrate, btnDraw, btnAddBox, btnPatch, btnMovePatch, btnDelete].forEach(b => b.classList.remove('active'));
+  const modeBtn = { calibrate: btnCalibrate, draw: btnDraw, place: btnAddBox, patch: btnPatch, move: btnMovePatch, delete: btnDelete }[m];
+  if (modeBtn) modeBtn.classList.add('active');
+  const cursors = { calibrate: 'crosshair', draw: 'crosshair', place: 'crosshair', patch: 'copy', move: 'grab', delete: 'pointer' };
+  canvas.style.cursor = cursors[m] || 'crosshair';
+  const msgs = {
+    calibrate: 'Draw a line along a known distance, then enter its length',
+    draw: 'Click and drag to draw an area. Scroll to zoom. Pan: right-drag / Space+drag / Arrow keys.',
+    place: 'Click to place the box. Press Escape to cancel.',
+    patch: 'Click to place a 1.25m x 1.25m patch',
+    move: 'Click and drag a patch to move it',
+    delete: 'Click on an area or patch to delete it',
+  };
+  statusEl.textContent = msgs[m] || '';
+}
+
+// --- Button handlers ---
+btnCalibrate.addEventListener('click', () => {
+  prevMode = mode;
+  setMode('calibrate');
+});
+btnDraw.addEventListener('click', () => setMode('draw'));
+btnPatch.addEventListener('click', () => setMode('patch'));
+btnMovePatch.addEventListener('click', () => setMode('move'));
+btnDelete.addEventListener('click', () => setMode('delete'));
+
+btnUndo.addEventListener('click', () => {
+  if (patches.length > 0) patches.pop();
+  else if (boxes.length > 0) boxes.pop();
+  updateInfo(); render();
+});
+
+btnClear.addEventListener('click', () => {
+  boxes = []; patches = [];
+  updateInfo(); render();
+});
+
+// --- Add box by size ---
+btnAddBox.addEventListener('click', () => {
+  boxModal.classList.add('visible');
+  boxWidthInput.focus();
+  boxWidthInput.select();
+});
+boxConfirm.addEventListener('click', () => {
+  const wM = parseFloat(boxWidthInput.value);
+  const hM = parseFloat(boxHeightInput.value);
+  if (wM > 0 && hM > 0) {
+    placingBox = { wPx: wM * pixelsPerMeter, hPx: hM * pixelsPerMeter, wM, hM, imgX: null, imgY: null };
+    boxModal.classList.remove('visible');
+    setMode('place');
+  }
+});
+boxCancel.addEventListener('click', () => {
+  boxModal.classList.remove('visible');
+});
+
+btnZoomIn.addEventListener('click', () => zoomCenter(1.3));
+btnZoomOut.addEventListener('click', () => zoomCenter(1 / 1.3));
+btnZoomFit.addEventListener('click', () => { fitToScreen(); render(); });
+
+// --- Calibration modal ---
+calConfirm.addEventListener('click', () => {
+  const meters = parseFloat(calInput.value);
+  if (meters > 0 && calLinePixelDist > 0) {
+    pixelsPerMeter = calLinePixelDist / meters;
+    updateInfo();
+  }
+  calModal.classList.remove('visible');
+  setMode(prevMode);
+  render();
+});
+calCancel.addEventListener('click', () => {
+  calLine = null;
+  calModal.classList.remove('visible');
+  setMode(prevMode);
+  render();
+});
+
+// --- Hit testing ---
+function patchAt(pt) {
+  const ppw = patchPxW(), pph = patchPxH();
+  for (let i = patches.length - 1; i >= 0; i--) {
+    const p = patches[i];
+    if (pt.x >= p.x && pt.x <= p.x + ppw && pt.y >= p.y && pt.y <= p.y + pph) return i;
+  }
+  return -1;
+}
+
+function boxAt(pt) {
+  for (let i = boxes.length - 1; i >= 0; i--) {
+    const b = boxes[i];
+    const x1 = Math.min(b.x, b.x + b.w), x2 = Math.max(b.x, b.x + b.w);
+    const y1 = Math.min(b.y, b.y + b.h), y2 = Math.max(b.y, b.y + b.h);
+    if (pt.x >= x1 && pt.x <= x2 && pt.y >= y1 && pt.y <= y2) return i;
+  }
+  return -1;
+}
+
+// --- Panning helpers ---
+function startPan(e) {
+  isPanning = true;
+  panStartScreen = { x: e.clientX, y: e.clientY };
+  panStartView = { x: viewX, y: viewY };
+  canvas.style.cursor = 'grabbing';
+}
+
+function updateCursor() {
+  if (spaceHeld) { canvas.style.cursor = 'grab'; return; }
+  const cursors = { calibrate: 'crosshair', draw: 'crosshair', patch: 'copy', move: 'grab', delete: 'pointer' };
+  canvas.style.cursor = cursors[mode] || 'crosshair';
+}
+
+// Prevent context menu on canvas so right-click drag works
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// --- Mouse events ---
+canvas.addEventListener('mousedown', (e) => {
+  // Pan: middle-click, right-click, alt+left-click, or space+left-click
+  if (e.button === 1 || e.button === 2 || (e.button === 0 && e.altKey) || (e.button === 0 && spaceHeld)) {
+    startPan(e);
+    e.preventDefault();
+    return;
+  }
+  if (e.button !== 0) return;
+
+  const pt = eventToImg(e);
+
+  if (mode === 'place' && placingBox) {
+    const bx = pt.x - placingBox.wPx / 2;
+    const by = pt.y - placingBox.hPx / 2;
+    boxes.push({ x: bx, y: by, w: placingBox.wPx, h: placingBox.hPx, colorIdx: boxes.length });
+    updateInfo(); render();
+    // Stay in place mode so you can place multiple copies; Escape to exit
+    return;
+  }
+
+  if (mode === 'delete') {
+    const pi = patchAt(pt);
+    if (pi >= 0) { patches.splice(pi, 1); updateInfo(); render(); return; }
+    const bi = boxAt(pt);
+    if (bi >= 0) { boxes.splice(bi, 1); updateInfo(); render(); return; }
+    return;
+  }
+
+  if (mode === 'patch') {
+    const ppw = patchPxW(), pph = patchPxH();
+    patches.push({ x: pt.x - ppw / 2, y: pt.y - pph / 2 });
+    updateInfo(); render();
+    return;
+  }
+
+  if (mode === 'move') {
+    const pi = patchAt(pt);
+    if (pi >= 0) {
+      movingPatchIdx = pi;
+      moveOffset = { x: pt.x - patches[pi].x, y: pt.y - patches[pi].y };
+      isDragging = true;
+      canvas.style.cursor = 'grabbing';
+    }
+    return;
+  }
+
+  if (mode === 'draw' || mode === 'calibrate') {
+    tempStart = pt;
+    isDragging = true;
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (isPanning) {
+    const dx = e.clientX - panStartScreen.x;
+    const dy = e.clientY - panStartScreen.y;
+    // Convert screen pixel delta to image pixel delta
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    viewX = panStartView.x - (dx * scaleX) / zoom;
+    viewY = panStartView.y - (dy * scaleY) / zoom;
+    render();
+    return;
+  }
+
+  if (!isDragging) return;
+  const cur = eventToImg(e);
+
+  if (mode === 'move' && movingPatchIdx >= 0) {
+    patches[movingPatchIdx].x = cur.x - moveOffset.x;
+    patches[movingPatchIdx].y = cur.y - moveOffset.y;
+    render();
+    return;
+  }
+
+  if (mode === 'calibrate' && tempStart) {
+    render();
+    ctx.save();
+    ctx.scale(zoom, zoom);
+    ctx.translate(-viewX, -viewY);
+    ctx.beginPath();
+    ctx.moveTo(tempStart.x, tempStart.y);
+    ctx.lineTo(cur.x, cur.y);
+    ctx.strokeStyle = '#00ff88';
+    ctx.lineWidth = 3 / zoom;
+    ctx.setLineDash([8 / zoom, 4 / zoom]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const dx = cur.x - tempStart.x, dy = cur.y - tempStart.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const mx = (tempStart.x + cur.x) / 2, my = (tempStart.y + cur.y) / 2;
+    ctx.font = `bold ${14 / zoom}px system-ui`;
+    ctx.fillStyle = '#00ff88';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 4 / zoom;
+    ctx.fillText(`${dist.toFixed(0)} px`, mx, my - 10 / zoom);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    return;
+  }
+
+  if (mode === 'draw' && tempStart) {
+    render();
+    ctx.save();
+    ctx.scale(zoom, zoom);
+    ctx.translate(-viewX, -viewY);
+    const w = cur.x - tempStart.x;
+    const h = cur.y - tempStart.y;
+    ctx.fillStyle = BOX_COLORS[boxes.length % BOX_COLORS.length];
+    ctx.fillRect(tempStart.x, tempStart.y, w, h);
+    ctx.strokeStyle = BOX_BORDERS[boxes.length % BOX_BORDERS.length];
+    ctx.lineWidth = 2.5 / zoom;
+    ctx.strokeRect(tempStart.x, tempStart.y, w, h);
+
+    const wm = Math.abs(w) / pixelsPerMeter;
+    const hm = Math.abs(h) / pixelsPerMeter;
+    const area = wm * hm;
+    ctx.font = `bold ${14 / zoom}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 4 / zoom;
+    ctx.fillText(`${area.toFixed(1)} m²`, tempStart.x + w / 2, tempStart.y + h / 2);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+});
+
+canvas.addEventListener('mouseup', (e) => {
+  if (isPanning) {
+    isPanning = false;
+    updateCursor();
+    return;
+  }
+
+  if (mode === 'move' && movingPatchIdx >= 0) {
+    movingPatchIdx = -1;
+    isDragging = false;
+    canvas.style.cursor = 'grab';
+    return;
+  }
+
+  if (mode === 'calibrate' && isDragging && tempStart) {
+    const end = eventToImg(e);
+    const dx = end.x - tempStart.x, dy = end.y - tempStart.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    isDragging = false;
+    if (dist < 5) { tempStart = null; render(); return; }
+    calLine = { x1: tempStart.x, y1: tempStart.y, x2: end.x, y2: end.y };
+    calLinePixelDist = dist;
+    tempStart = null;
+    render();
+    calInput.value = (dist / pixelsPerMeter).toFixed(1);
+    calModal.classList.add('visible');
+    calInput.focus();
+    calInput.select();
+    return;
+  }
+
+  if (mode === 'draw' && isDragging && tempStart) {
+    const end = eventToImg(e);
+    const w = end.x - tempStart.x;
+    const h = end.y - tempStart.y;
+    isDragging = false;
+    if (Math.abs(w) < 5 && Math.abs(h) < 5) { tempStart = null; render(); return; }
+    boxes.push({ x: tempStart.x, y: tempStart.y, w, h, colorIdx: boxes.length });
+    tempStart = null;
+    updateInfo(); render();
+  }
+});
+
+// Zoom with scroll wheel
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const cx = (e.clientX - rect.left) * scaleX;
+  const cy = (e.clientY - rect.top) * scaleY;
+  const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  zoomAt(cx, cy, factor);
+}, { passive: false });
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (calModal.classList.contains('visible')) {
+    if (e.key === 'Enter') calConfirm.click();
+    if (e.key === 'Escape') calCancel.click();
+    return;
+  }
+  if (e.key === ' ' && !spaceHeld) {
+    spaceHeld = true;
+    updateCursor();
+    e.preventDefault();
+    return;
+  }
+  const PAN_STEP = 50 / zoom; // pan by 50 screen pixels worth
+  if (e.key === 'z' && (e.ctrlKey || e.metaKey)) { btnUndo.click(); }
+  else if (e.key === 'Escape') { isDragging = false; tempStart = null; movingPatchIdx = -1; render(); }
+  else if (e.key === '=' || e.key === '+') { zoomCenter(1.3); }
+  else if (e.key === '-') { zoomCenter(1 / 1.3); }
+  else if (e.key === '0') { fitToScreen(); render(); }
+  else if (e.key === 'ArrowLeft')  { viewX -= PAN_STEP; render(); }
+  else if (e.key === 'ArrowRight') { viewX += PAN_STEP; render(); }
+  else if (e.key === 'ArrowUp')    { viewY -= PAN_STEP; render(); }
+  else if (e.key === 'ArrowDown')  { viewY += PAN_STEP; render(); }
+});
+
+document.addEventListener('keyup', (e) => {
+  if (e.key === ' ') {
+    spaceHeld = false;
+    updateCursor();
+  }
+});
+
+// Initial info
+updateInfo();
+</script>
+</body>
+</html>
